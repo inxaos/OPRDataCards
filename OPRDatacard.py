@@ -320,6 +320,9 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
     #     smallInfo.append(str(unit['size']) + "x")
 
     if 'type' in unit and unit['name'] != unit['type']:
+            #pdf.setFont('bold', 7)
+        pdf.setFillColorRGB(0, 0, 0)
+        pdf.drawString(5, dataCardParameters['pdfSize'][1] - 47, " ".join(smallInfo))
         smallInfo.append(unit['type'])
 
     sideClearance = 20
@@ -327,10 +330,21 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
     bottomClearance = 5
     specialRules = []
     for rule in unit['rules']:
+        #logger.info(rule)
         count = ""
         if 'count' in rule and unit['size'] != 1:
             count = f'{rule["count"]}x '
         specialRules.append(f'{count}{rule["label"]}')
+
+    for equip in unit['equipment']:
+        #logger.info(equip)
+        # count = ""
+        # if 'count' in equip and unit['size'] != 1:
+        #     count = f'{equip["count"]}x '
+        #specialRules.append(f'{count}{equip['specialRule']["label"]}')
+        for sr in equip['specialRules']:
+            if sr['label'] not in specialRules:
+                specialRules.append(f'{sr["label"]}')
 
     nameLines = []
     maxLineChars = 60
@@ -346,12 +360,14 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
     pdf.setFont('bold', 7)
     pdf.setFillColorRGB(0, 0, 0)
     offset = 0
+    if len(nameLines) > 1:
+        offset -= 12
     for line in nameLines:
         #pdf.drawString(5, dataCardParameters['pdfSize'][1] - 25 - offset, line)
         pdf.drawString(5, dataCardParameters['pdfSize'][1] - 47 - offset, line)
-        offset += 12
+        offset += 10
     
-    smallInfo.append(", ".join(specialRules))
+    #smallInfo.append(", ".join(specialRules))
 
     #pdf.setFont('bold', 7)
     #pdf.setFillColorRGB(0, 0, 0)
@@ -425,11 +441,17 @@ def dataCardUnitRules(pdf, dataCardParameters, unit):
     pdf.setFillColorRGB(0, 0, 0)
 
     specialRules = []
+    #logger.debug("CHECK")
+    #logger.idebugnfo(unit)
     for rule in unit['rules']:
+        logger.debug(rule)
         count = ""
         if 'count' in rule and unit['size'] != 1:
             count = f'{rule["count"]}x '
         specialRules.append(f'{count}{rule["label"]}')
+
+    #TODO: Add Quality Def Toughness AND/OR Quest Stats here
+    #pdf.drawString(sideClearance+2, bottomClearance + (height/2)-2, ", ".join(specialRules))
 
     # nameLines = []
     # maxLineChars = 25
@@ -554,10 +576,15 @@ def dataCardUnitImage(pdf, dataCardParameters, unit, listName, armyFaction, imag
 
 
 def dataCardUnitName(pdf, dataCardParameters, unit):
+    fontSize = 14
+    maxLineChars = 25
+    if len(unit['name']) > 25:
+        fontSize = 12
+        maxLineChars = 35
     # Unit Name
     parts = unit['name'].split(" ")
     nameLines = []
-    maxLineChars = 25
+    #maxLineChars = 25
     lineParts = []
     for part in parts:
         if len(" ".join(lineParts)) + len(part) > maxLineChars:
@@ -568,7 +595,8 @@ def dataCardUnitName(pdf, dataCardParameters, unit):
         lineParts.append(" (x" + str(unit['size']) + ")")
     nameLines.append(" ".join(lineParts))
 
-    pdf.setFont('bold', 14)
+    #pdf.setFont('bold', 14)
+    pdf.setFont('bold', fontSize)
     pdf.setFillColorRGB(0, 0, 0)
     offset = 0
     for line in nameLines:
@@ -623,7 +651,25 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
         pdf.drawString(startX + offsetX[i], startY + offsetY, headers[i])
     offsetY -= 12
 
-    for weapon in unit['weapons']:
+    #logger.info(unit)
+    # sortedWeapons = unit['weapons']
+    # sortedWeapons.sort(key=lambda w: w.get('count', 0))
+    # sortedWeapons.sort(key=lambda w: w.get('ap', 0), reverse = True)
+    # sortedWeapons.sort(key=lambda w: w.get('attacks', 0))
+    # sortedWeapons.sort(key=lambda w: w.get('range', 0))
+
+    sortedWeapons = sorted(unit['weapons'], 
+        key=lambda w: (
+            w.get('range', 0),
+            w.get('attacks', 0),
+            w.get('ap', 0),
+            w.get('count', 0)     
+        )
+    )
+
+    #sortedWeapons = sorted(unit['weapons'], key=lambda weapon: weapon.name)
+    for weapon in sortedWeapons:
+    #for weapon in unit['weapons']:
         pdf.setFont("regular", 10)
 
         #highlight alternating rows
@@ -680,6 +726,7 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
         pdf.drawString(startX + offsetX[0], startY + offsetY, "Upgrades")
         offsetY -= 13
         color = 1
+        toughness = 0
 
         for equipment in unit['equipment']:
             pdf.setFont("regular", 10)
@@ -699,7 +746,13 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
             pdf.drawString(startX + offsetX[0], startY + offsetY, equipment['name'])
             label = []
             for specialRule in equipment['specialRules']:
+                logger.debug("specialRule:")
+                logger.debug(specialRule)
+                #logger.debug("\n")
                 label.append(str(specialRule['label']))
+                # if specialRule['name'] == "Tough":
+                #     toughness += specialRule['rating']
+
             
             pdf.setFont("italic", 10)
             pdf.drawString(startX + offsetX[4], startY + offsetY, ", ".join(label))
@@ -1213,16 +1266,20 @@ def getWeapon(data, modCount=-1):
     return weapon
 
 def removeItem(removeItems: list, count: int, originalItems: dict, type=""):
-    logger.debug(f'{removeItems} from {type}') 
+    logger.debug(f'{removeItems} from {type}')
+    logger.debug(f'{removeItems} from {originalItems}')
     for remove in removeItems:
         for i in range(len(originalItems)):
             remove = remove.strip()
             group = [remove, remove + "s", remove[:-1]]
             if re.match(r'^(' + "|".join(group) + ')$', originalItems[i]['name'].strip()):
                 if ('count' not in originalItems[i] or count == "any" or count == None or originalItems[i]['count'] == 1):
+                    logger.debug("if")
                     originalItems.pop(i)
                 else:
-                    originalItems[i]['count'] -= count
+                    logger.debug("else")
+                    originalItems[i]['count'] = int(originalItems[i]['count']) - count
+                    #originalItems[i]['count'] -= count
                     if originalItems[i]['count'] <= 0:
                         originalItems.pop(i)
                 break
@@ -1305,8 +1362,13 @@ def getUnitUpgrades(unit, unitData, jsonArmyBookList):
                                         affectsValue = affects['value']
                                     elif affects and affects['type'] == "all":
                                         affectsValue = None
+                                    elif affects and affects['type'] == "up to":
+                                        affectsValue = affects['value']
                                     elif affects is None:
                                         affectsValue = 999
+                                    else:
+                                        logger.warning("Default handling for " + str(affects))
+                                        affectsValue = 1
 
                                     if unitData['size'] > 1:
                                         unitData['weapons'] = mergeWeapon(unitData['weapons'])
