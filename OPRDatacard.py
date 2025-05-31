@@ -316,15 +316,46 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
     pdf.line(dataCardParameters['sideClearance'], dataCardParameters['pdfSize'][1] - 50,
              dataCardParameters['pdfSize'][0] - dataCardParameters['sideClearance'], dataCardParameters['pdfSize'][1] - 50)
     smallInfo = []
-    if (unit['size'] > 1):
-        smallInfo.append(str(unit['size']) + "x")
+    # if (unit['size'] > 1):
+    #     smallInfo.append(str(unit['size']) + "x")
 
     if 'type' in unit and unit['name'] != unit['type']:
         smallInfo.append(unit['type'])
 
-    pdf.setFont('regular', 8)
+    sideClearance = 20
+    height = 10
+    bottomClearance = 5
+    specialRules = []
+    for rule in unit['rules']:
+        count = ""
+        if 'count' in rule and unit['size'] != 1:
+            count = f'{rule["count"]}x '
+        specialRules.append(f'{count}{rule["label"]}')
+
+    nameLines = []
+    maxLineChars = 60
+    lineParts = []
+    parts = ", ".join(specialRules).split(" ")
+    for part in parts:
+        if len(" ".join(lineParts)) + len(part) > maxLineChars:
+            nameLines.append(" ".join(lineParts))
+            lineParts = []
+        lineParts.append(part)
+    nameLines.append(" ".join(lineParts))
+
+    pdf.setFont('bold', 7)
     pdf.setFillColorRGB(0, 0, 0)
-    pdf.drawString(5, dataCardParameters['pdfSize'][1] - 47, " ".join(smallInfo))
+    offset = 0
+    for line in nameLines:
+        #pdf.drawString(5, dataCardParameters['pdfSize'][1] - 25 - offset, line)
+        pdf.drawString(5, dataCardParameters['pdfSize'][1] - 47 - offset, line)
+        offset += 12
+    
+    smallInfo.append(", ".join(specialRules))
+
+    #pdf.setFont('bold', 7)
+    #pdf.setFillColorRGB(0, 0, 0)
+    #pdf.drawString(5, dataCardParameters['pdfSize'][1] - 47, " ".join(smallInfo))
 
 
 def dataCardUnitWounds(pdf, dataCardParameters, unit, army):
@@ -381,6 +412,7 @@ def dataCardUnitRules(pdf, dataCardParameters, unit):
     sideClearance = 20
     height = 10
     bottomClearance = 5
+
     path.moveTo(0 + sideClearance, 0 + bottomClearance)
     path.lineTo(dataCardParameters['pdfSize'][0] - sideClearance, 0 + bottomClearance)
     path.lineTo(dataCardParameters['pdfSize'][0] - sideClearance,
@@ -398,9 +430,27 @@ def dataCardUnitRules(pdf, dataCardParameters, unit):
         if 'count' in rule and unit['size'] != 1:
             count = f'{rule["count"]}x '
         specialRules.append(f'{count}{rule["label"]}')
-    pdf.drawString(sideClearance+2, bottomClearance +
-                   (height/2)-2, ", ".join(specialRules))
 
+    # nameLines = []
+    # maxLineChars = 25
+    # lineParts = []
+    # parts = ", ".join(specialRules).split(" ")
+    # for part in parts:
+    #     if len(" ".join(lineParts)) + len(part) > maxLineChars:
+    #         nameLines.append(" ".join(lineParts))
+    #         lineParts = []
+    #     lineParts.append(part)
+    # nameLines.append(" ".join(lineParts))
+
+    # pdf.setFont('bold', 14)
+    # pdf.setFillColorRGB(0, 0, 0)
+    # offset = 0
+    # for line in nameLines:
+    #     #pdf.drawString(5, dataCardParameters['pdfSize'][1] - 25 - offset, line)
+    #     pdf.drawString(sideClearance+2, bottomClearance + (height/2)-2 - offset, line)
+    #     offset += 12
+
+    #pdf.drawString(sideClearance+2, bottomClearance + (height/2)-2, ", ".join(specialRules))
 
 def dataCardUnitImage(pdf, dataCardParameters, unit, listName, armyFaction, imageInfos):
     if imageInfos == False:
@@ -514,6 +564,8 @@ def dataCardUnitName(pdf, dataCardParameters, unit):
             nameLines.append(" ".join(lineParts))
             lineParts = []
         lineParts.append(part)
+    if int(unit['size']) > 1:
+        lineParts.append(" (x" + str(unit['size']) + ")")
     nameLines.append(" ".join(lineParts))
 
     pdf.setFont('bold', 14)
@@ -548,9 +600,12 @@ def dataCardUnitSkills(pdf, dataCardParameters, unit):
     pdf.setFillColorRGB(0, 0, 0)
     pdf.drawCentredString(startX, startY, "Quality")
     pdf.drawCentredString(startX, startY - (lineHight*2), "Defense")
-    pdf.setFont('regular', 8)
+    #pdf.setFont('regular', 8)
+    pdf.setFillColorRGB(0.74609375, 0.0859375, 0)
     pdf.drawCentredString(startX, startY - (lineHight*1), str(quality) + "+")
+    pdf.setFillColorRGB(0, 0.4375, 0)
     pdf.drawCentredString(startX, startY - (lineHight*3), str(defense) + "+")
+    pdf.setFillColorRGB(0, 0, 0)
 
 
 def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
@@ -559,17 +614,31 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
     startY = dataCardParameters['pdfSize'][1] - 75
     offsetX = [0, 130, 155, 180, 200]
     offsetY = 0
-    headers = ['Weapon', 'RNG', 'ATT', 'AP', 'Special rules']
+    headers = ['Weapon', 'Rng', 'Atk', 'AP', 'Special Rules']
+    color = 1
+
     for i in range(len(headers)):
-        pdf.setFont("bold", 9)
+        pdf.setFont("bold", 10)
         pdf.setFillColorRGB(0, 0, 0)
         pdf.drawString(startX + offsetX[i], startY + offsetY, headers[i])
-    offsetY -= 10
+    offsetY -= 12
 
     for weapon in unit['weapons']:
-        pdf.setFont("regular", 9)
-        pdf.setFillColorRGB(0, 0, 0)
+        pdf.setFont("regular", 10)
 
+        #highlight alternating rows
+        if color == 1:
+           color = 0.7421875
+        else:
+           color = 1
+
+        pdf.saveState() 
+        pdf.setFillColorRGB(color, color, color)
+        pdf.setStrokeColorRGB(color,color,color)
+        pdf.rect(startX + offsetX[0],startY + offsetY - 2,290,10, fill=1)
+        pdf.restoreState() 
+
+        pdf.setFillColorRGB(0, 0, 0)
         if weapon['count'] > 1:
             weaponLabel = str(weapon['count']) + "x " + weapon['name']
         else:
@@ -579,46 +648,62 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
                        startY + offsetY, weaponLabel)
 
         if "range" in weapon:
-            pdf.drawString(startX + offsetX[1], startY + offsetY, str(weapon['range']) + '"')
+            pdf.drawString(startX + offsetX[1] + 5, startY + offsetY, str(weapon['range']) + '"')
         else:
-            pdf.drawString(startX + offsetX[1], startY + offsetY, "-")
+            pdf.drawString(startX + offsetX[1] + 7, startY + offsetY, "-")
 
-        pdf.drawString(startX + offsetX[2], startY + offsetY, "A" + str(weapon['attacks']))
+        pdf.drawString(startX + offsetX[2] + 2, startY + offsetY, "A" + str(weapon['attacks']))
 
         if "ap" in weapon:
-            pdf.drawString(startX + offsetX[3], startY +
+            pdf.drawString(startX + offsetX[3] + 5, startY +
                            offsetY, str(weapon['ap']))
         else:
-            pdf.drawString(startX + offsetX[3], startY + offsetY, "-")
+            pdf.drawString(startX + offsetX[3] + 5, startY + offsetY, "-")
 
         if "specialRules" in weapon and len(weapon['specialRules']) > 0:
             label = []
             for specialRule in weapon['specialRules']:
                 label.append(str(specialRule['label']))
+            pdf.setFont("italic", 10)
 
             pdf.drawString(startX + offsetX[4], startY + offsetY, ", ".join(label))
         else:
             pdf.drawString(startX + offsetX[4], startY + offsetY, "-")
 
-        offsetY -= 10
+        offsetY -= 12
 
     if 'equipment' in unit and len(unit['equipment']) > 0:
-        offsetY -= 2
+        offsetY -= 5
 
-        pdf.setFont("bold", 9)
+        pdf.setFont("bold", 10)
         pdf.setFillColorRGB(0, 0, 0)
         pdf.drawString(startX + offsetX[0], startY + offsetY, "Upgrades")
-        offsetY -= 10
+        offsetY -= 13
+        color = 1
+
         for equipment in unit['equipment']:
-            pdf.setFont("regular", 9)
+            pdf.setFont("regular", 10)
+            
+            if color == 1:
+                color = 0.7421875
+            else:
+                color = 1
+
+            pdf.saveState() 
+            pdf.setFillColorRGB(color, color, color)
+            pdf.setStrokeColorRGB(color,color,color)
+            pdf.rect(startX + offsetX[0],startY + offsetY - 2,290,10, fill=1)
+            pdf.restoreState()
+
             pdf.setFillColorRGB(0, 0, 0)
             pdf.drawString(startX + offsetX[0], startY + offsetY, equipment['name'])
             label = []
             for specialRule in equipment['specialRules']:
                 label.append(str(specialRule['label']))
-
+            
+            pdf.setFont("italic", 10)
             pdf.drawString(startX + offsetX[4], startY + offsetY, ", ".join(label))
-            offsetY -= 10
+            offsetY -= 12
 
 
 def unitOverview(pdf, dataCardParameters, army):
@@ -825,6 +910,8 @@ def createDataCard(army):
             settings['path']['fontFolder'], "rosa-sans", "hinted-RosaSans-Bold.ttf")))
         pdfmetrics.registerFont(TTFont('regular', os.path.join(
             settings['path']['fontFolder'], "rosa-sans", "hinted-RosaSans-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont('italic', os.path.join(
+            settings['path']['fontFolder'], "rosa-sans", "hinted-RosaSans-Italic.ttf")))
     except Exception as ex:
         logger.error("Font is missing!")
         logger.error(ex)
