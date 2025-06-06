@@ -26,6 +26,8 @@ import os
 import platform
 import subprocess
 import threading
+from dataclasses import dataclass
+
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +312,21 @@ def dataCardUnitPoints(pdf, dataCardParameters, unit):
         pdf.drawRightString(dataCardParameters['pdfSize'][0] - 22, bottomClearance +
                             (height/2)-2, str(cost) + " pt")
 
+def process_rules_list(rules_list):
+    toughPattern = re.compile(r"Tough\((\d+)\)")
+    global total_tough
+    new_rules = []
+    logger.info(rules_list)
+    for rule in rules_list:
+        match = toughPattern.match(rule)
+        if match and total_tough is int :
+            total_tough += int(match.group(1))
+            # Skip this rule (we're aggregating it)
+        elif match :
+             total_tough = int(match.group(1))
+        else:
+            new_rules.append(rule)
+    return new_rules
 
 def dataCardUnitType(pdf, dataCardParameters, unit):
     # Unit type
@@ -346,8 +363,30 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
             if sr['label'] not in specialRules:
                 specialRules.append(f'{sr["label"]}')
 
+    #Additive toughness
+    
+    #total_tough = 0
+
+    #for unit in army['units']:
+    # Process unit-level rules
+    logger.info(specialRules)
+    global total_tough
+    total_tough = 0
+    processedRules = process_rules_list(specialRules)
+    #logger.info(processedRules)
+
+    # Process weapon-level rules
+    # for weapon in unit.get('weapons', []):
+    #     weapon['specialRules'] = process_rules_list(weapon.get('specialRules', []))
+
+    # # Process equipment-level rules
+    # for equipment in unit.get('equipment', []):
+    #     equipment['specialRules'] = process_rules_list(equipment.get('specialRules', []))
+
+
+
     nameLines = []
-    maxLineChars = 60
+    maxLineChars = 55
     lineParts = []
     parts = ", ".join(specialRules).split(" ")
     for part in parts:
@@ -620,19 +659,21 @@ def dataCardArmyBookVersion(pdf, dataCardParameters, versions, armyId):
 
 def dataCardUnitSkills(pdf, dataCardParameters, unit):
     startX = dataCardParameters['pdfSize'][0] - 25
-    startY = dataCardParameters['pdfSize'][1] - 21
+    startY = dataCardParameters['pdfSize'][1] - 26
     lineHight = 8
     quality = getDiceRoll(unit["quality"], settings['2w6'])
     defense = getDiceRoll(unit["defense"], settings['2w6'])
-    pdf.setFont('bold', 8)
-    pdf.setFillColorRGB(0, 0, 0)
-    pdf.drawCentredString(startX, startY, "Quality")
-    pdf.drawCentredString(startX, startY - (lineHight*2), "Defense")
-    #pdf.setFont('regular', 8)
-    pdf.setFillColorRGB(0.74609375, 0.0859375, 0)
-    pdf.drawCentredString(startX, startY - (lineHight*1), str(quality) + "+")
+    pdf.setFont('bold', 12)
+    #pdf.setFillColorRGB(0, 0, 0)
     pdf.setFillColorRGB(0, 0.4375, 0)
-    pdf.drawCentredString(startX, startY - (lineHight*3), str(defense) + "+")
+    pdf.drawCentredString(startX, startY, "Qua: " + str(quality) + "+")
+    pdf.setFillColorRGB(0.74609375, 0.0859375, 0)
+    pdf.drawCentredString(startX, startY - (lineHight*2), "Def:  " + str(defense) + "+")
+    #pdf.setFont('regular', 8)
+    # pdf.setFillColorRGB(0.74609375, 0.0859375, 0)
+    # pdf.drawCentredString(startX, startY - (lineHight*1), str(quality) + "+")
+    # pdf.setFillColorRGB(0, 0.4375, 0)
+    # pdf.drawCentredString(startX, startY - (lineHight*3), str(defense) + "+")
     pdf.setFillColorRGB(0, 0, 0)
 
 
@@ -651,25 +692,16 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
         pdf.drawString(startX + offsetX[i], startY + offsetY, headers[i])
     offsetY -= 12
 
-    #logger.info(unit)
-    # sortedWeapons = unit['weapons']
-    # sortedWeapons.sort(key=lambda w: w.get('count', 0))
-    # sortedWeapons.sort(key=lambda w: w.get('ap', 0), reverse = True)
-    # sortedWeapons.sort(key=lambda w: w.get('attacks', 0))
-    # sortedWeapons.sort(key=lambda w: w.get('range', 0))
-
     sortedWeapons = sorted(unit['weapons'], 
         key=lambda w: (
-            w.get('range', 0),
-            w.get('attacks', 0),
-            w.get('ap', 0),
-            w.get('count', 0)     
+            int(w.get('range', 0)),
+            int(w.get('attacks', 0)),
+            int(w.get('ap', 0)),
+            int(w.get('count', 0))
         )
     )
 
-    #sortedWeapons = sorted(unit['weapons'], key=lambda weapon: weapon.name)
     for weapon in sortedWeapons:
-    #for weapon in unit['weapons']:
         pdf.setFont("regular", 10)
 
         #highlight alternating rows
@@ -866,19 +898,29 @@ def dataCardSpells(pdf, dataCardParameters, army):
 
 def dataCardRuleInfo(pdf, dataCardParameters, army):
     rules = []
+    seen = set()
+
     for unit in army['units']:
         for rule in unit['rules']:
-            rules.append(rule['name'])
+            name = rule['name']
+            if name not in seen:
+                seen.add(name)
+                rules.append(name)
 
         for weapon in unit['weapons']:
-            if 'specialRules' in weapon:
-                for rule in weapon['specialRules']:
-                    rules.append(rule['name'])
+            for rule in weapon.get('specialRules', []):
+                name = rule['name']
+                if name not in seen:
+                    seen.add(name)
+                    rules.append(name)
 
-        if 'equipment' in unit:
-            for equipment in unit['equipment']:
-                for rule in equipment['specialRules']:
-                    rules.append(rule['name'])
+        for equipment in unit.get('equipment', []):
+            for rule in equipment.get('specialRules', []):
+                name = rule['name']
+                if name not in seen:
+                    seen.add(name)
+                    rules.append(name)
+    rules.sort()
     rules = list(dict.fromkeys(rules))
     ruleDescriptions = []
     downloadCommonRules(army['gameSystemId'])
@@ -902,41 +944,109 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
     startY = dataCardParameters['pdfSize'][1] - dataCardParameters['topClearance'] - 7
     offsetY = 0
     fontSize = 7
-    for rule in ruleDescriptions:
-        offsetXName = pdf.stringWidth(rule['name'] + ": ", "bold", fontSize)
+    color = 1
 
-        description = getTextWithDiceRoll(rule['description'], settings['2w6'])
-        parts = description.split(" ")
-        lines = []
-        lineParts = []
-        offsetXCalc = offsetXName
-        for part in parts:
-            if startX + offsetXCalc + pdf.stringWidth(" ".join(lineParts), "regular", fontSize) + pdf.stringWidth(" ".join(part), "regular", fontSize) > dataCardParameters['pdfSize'][0] - dataCardParameters['sideClearance']:
-                lines.append(" ".join(lineParts))
-                lineParts = []
-                offsetXCalc = 0
-            lineParts.append(part)
-        lines.append(" ".join(lineParts))
+    ## Loop units in order they were originally written
+    for unit in army['units']:
+        unitSeen = set()
+        unitRules = []
+        for rule in unit['rules']:
+            if rule['name'] not in unitSeen:
+                unitSeen.add(rule['name'])
+        for equipment in unit.get('equipment', []):
+            for rule in equipment.get('specialRules', []):
+                if rule['name'] not in unitSeen:
+                    unitSeen.add(rule['name'])
+        logger.info(unitSeen)
+        for rule in unitSeen:
+            
+            offsetXName = pdf.stringWidth(rule + ": ", "bold", fontSize)
+            description = getTextWithDiceRoll([r for r in ruleDescriptions if r['name'] == rule][0]['description'], settings['2w6'])
+            parts = description.split(" ")
+            lines = []
+            lineParts = []
+            offsetXCalc = offsetXName
+            for part in parts:
+                if startX + offsetXCalc + pdf.stringWidth(" ".join(lineParts), "regular", fontSize) + pdf.stringWidth(" ".join(part), "regular", fontSize) > dataCardParameters['pdfSize'][0] - dataCardParameters['sideClearance']:
+                    lines.append(" ".join(lineParts))
+                    lineParts = []
+                    offsetXCalc = 0
+                lineParts.append(part)
+            lines.append(" ".join(lineParts))
 
-        if startY - (len(lines)*fontSize) + offsetY < dataCardParameters['bottomClearance']:
-            pdf.showPage()
-            dataCardBoarderFrame(pdf, dataCardParameters)
-            offsetY = 0
+            if startY - (len(lines)*fontSize) + offsetY < dataCardParameters['bottomClearance']:
+                pdf.showPage()
+                dataCardBoarderFrame(pdf, dataCardParameters)
+                offsetY = 0
+            # Name
+            pdf.setFillColorRGB(0, 0, 0)
+            pdf.setFont("bold", fontSize)
+            pdf.drawString(startX, startY + offsetY, rule + ": ")
+
+            # Description
+            pdf.setFont("regular", fontSize)
+            pdf.setFillColorRGB(0, 0, 0)
+            for line in lines:
+                pdf.drawString(startX + offsetXName, startY + offsetY, line)
+                offsetY -= fontSize
+                offsetXName = 0
+            offsetY -= 3
+        pdf.showPage()
+        dataCardBoarderFrame(pdf, dataCardParameters)
+        offsetY = 0
+    
+    # for rule in ruleDescriptions:
+
+    #     offsetXName = pdf.stringWidth(rule['name'] + ": ", "bold", fontSize)
+
+    #     description = getTextWithDiceRoll(rule['description'], settings['2w6'])
+    #     parts = description.split(" ")
+    #     lines = []
+    #     lineParts = []
+    #     offsetXCalc = offsetXName
+    #     for part in parts:
+    #         if startX + offsetXCalc + pdf.stringWidth(" ".join(lineParts), "regular", fontSize) + pdf.stringWidth(" ".join(part), "regular", fontSize) > dataCardParameters['pdfSize'][0] - dataCardParameters['sideClearance']:
+    #             lines.append(" ".join(lineParts))
+    #             lineParts = []
+    #             offsetXCalc = 0
+    #         lineParts.append(part)
+    #     lines.append(" ".join(lineParts))
+
+    #     if startY - (len(lines)*fontSize) + offsetY < dataCardParameters['bottomClearance']:
+    #         pdf.showPage()
+    #         dataCardBoarderFrame(pdf, dataCardParameters)
+    #         offsetY = 0
+
+                ##
+        #highlight alternating rows
+        # if color == 1:
+        #    color = 0.7421875
+        # else:
+        #    color = 1
+
+        # pdf.saveState() 
+        # pdf.setFillColorRGB(color, color, color)
+        # pdf.setStrokeColorRGB(color,color,color)
+        # #Size of this row
+        # logger.info(lines)
+        # pdf.rect(startX, startY + offsetY,295,len(lines)*15, fill=1)
+        # pdf.restoreState() 
+        ##
 
         # Name
-        pdf.setFillColorRGB(0, 0, 0)
-        pdf.setFont("bold", fontSize)
-        pdf.drawString(startX, startY + offsetY, rule['name'] + ": ")
+    #     pdf.setFillColorRGB(0, 0, 0)
+    #     pdf.setFont("bold", fontSize)
+    #     pdf.drawString(startX, startY + offsetY, rule['name'] + ": ")
 
-        # Description
-        pdf.setFont("regular", fontSize)
-        pdf.setFillColorRGB(0, 0, 0)
-        for line in lines:
-            pdf.drawString(startX + offsetXName, startY + offsetY, line)
-            offsetY -= fontSize
-            offsetXName = 0
-        offsetY -= 3
-    pdf.showPage()
+    #     # Description
+    #     pdf.setFont("regular", fontSize)
+    #     pdf.setFillColorRGB(0, 0, 0)
+    #     for line in lines:
+    #         pdf.drawString(startX + offsetXName, startY + offsetY, line)
+    #         offsetY -= fontSize
+    #         offsetXName = 0
+    #     offsetY -= 3
+    #    pdf.showPage()
 
 
 def getPdfFileName(armyName):
