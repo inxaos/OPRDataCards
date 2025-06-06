@@ -316,7 +316,7 @@ def process_rules_list(rules_list):
     toughPattern = re.compile(r"Tough\((\d+)\)")
     global total_tough
     new_rules = []
-    logger.info(rules_list)
+    #logger.info(rules_list)
     for rule in rules_list:
         match = toughPattern.match(rule)
         if match and total_tough is int :
@@ -369,7 +369,7 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
 
     #for unit in army['units']:
     # Process unit-level rules
-    logger.info(specialRules)
+    #logger.info(specialRules)
     global total_tough
     total_tough = 0
     processedRules = process_rules_list(specialRules)
@@ -615,6 +615,7 @@ def dataCardUnitImage(pdf, dataCardParameters, unit, listName, armyFaction, imag
 
 
 def dataCardUnitName(pdf, dataCardParameters, unit):
+    logger.info(unit)
     fontSize = 14
     maxLineChars = 25
     if len(unit['name']) > 25:
@@ -1235,12 +1236,15 @@ def parseArmyTextList(armyListText):
                     else:
                         unitData['rules'].append(getTxtSpecialRule(rule))
                 regExMatch = re.findall(
-                    r"(?P<name>.*)\s\[(?P<unitCount>\d+)\]\sQ(?P<quality>\d+)\+\sD(?P<defense>\d+)\+$", data[0].strip(" "))
+                    r"(?P<name>.*)\s\[(?P<unitCount>\d+)\]\sQ(?P<quality>\d+)\+\sD(?P<defense>\d+)\+\sC(?P<combined>\d+)\+\sJ(?P<joinToUnit>\d+)\+\sS(?P<selectionId>\d+)\+$", data[0].strip(" "))
                 unitData['name'] = regExMatch[0][0]
                 unitData['type'] = ""
                 unitData['size'] = int(regExMatch[0][1])
                 unitData['quality'] = int(regExMatch[0][2])
-                unitData['defense'] = int(regExMatch[0][3])
+                unitData['combined'] = bool(regExMatch[0][3])
+                unitData['joinToUnit'] = regExMatch[0][4]
+                unitData['selectionId'] = regExMatch[0][5]
+
             elif unit == True:
                 weapons = getRulesFromTxt(armyListText[x].strip(" "))
 
@@ -1289,7 +1293,7 @@ def getUnit(unit, jsonArmyBookList):
         if (listUnit['id'] == unit['id']):
             data['type'] = listUnit['name']
             data['name'] = listUnit['name']
-            logger.info(f'{data["type"]} / {data["name"]} ({unit["id"]})')
+            #logger.info(f'{data["type"]} / {data["name"]} ({unit["id"]})')
             data['armyId'] = unit['armyId']
             data['id'] = listUnit['id']
             data['cost'] = listUnit['cost']
@@ -1297,7 +1301,13 @@ def getUnit(unit, jsonArmyBookList):
             data['quality'] = listUnit['quality']
             data['upgrades'] = listUnit['upgrades']
             data['size'] = listUnit['size']
-            data['combined'] = listUnit['combined']
+            data['selectionId'] = unit['selectionId']
+            #data['combined'] = unit['combined']
+
+            if "combined" in unit:
+                data['combined'] = unit['combined']
+            else:
+                data['combined'] = False
 
             if "joinToUnit" in unit:
                 data['joinToUnit'] = unit['joinToUnit']
@@ -1568,14 +1578,32 @@ def parseArmyJsonList(armyListJsonFile: str, validateVersion=True):
         if unitData != {}:
 
             #if combined
-            if unitData['combined']: 
-                #find the entry with our joinToUnit and update it
-                #armyData['units'].index(unitData['joinToUnit'])
+            #logger.info(unitData)
+           
+            if unitData['combined'] and unit['joinToUnit'] is not None:
+                target_unit = next((u for u in armyData['units'] if u['selectionId'] == unit['joinToUnit']), None)
+                if target_unit:
+                    logger.debug(f"Combining unit '{unitData['name']}' with '{target_unit['name']}'")
+                    target_unit['size'] += unitData['size']
+                    for weapon in unitData['weapons']:
+                        match = next((w for w in target_unit['weapons'] if w['name'] == weapon['name'] and w.get('ap') == weapon.get('ap')), None)
+                        if match:
+                            match['count'] += weapon['count']
+                        else:
+                            target_unit['weapons'].append(weapon)
+                else:
+                    logger.warning(f"joinToUnit '{unit['joinToUnit']}' not found. Adding unit as standalone.")
+                    armyData['units'].append(unitData)
+            elif unitData['combined'] and unit['joinToUnit'] is None:
+                logger.info("Combined with No JoinTo")
                 armyData['units'].append(unitData)
             else:
                 armyData['units'].append(unitData)
-
+    logger.info(armyData)
     return armyData
+
+def find_unit_by_id(units, target_id):
+    return next((unit for unit in units if unit['id'] == target_id), None)
 
 def armyVersionsDifference():
     logger.warning("Army Book version from JSON is different than Army Book Version from OPR Server")
