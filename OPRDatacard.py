@@ -957,9 +957,9 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
             for rule in equipment.get('specialRules', []):
                 if rule['name'] not in unitSeen:
                     unitSeen.add(rule['name'])
-        logger.info(unitSeen)
+        #logger.info(unitSeen)
+
         for rule in unitSeen:
-            
             offsetXName = pdf.stringWidth(rule + ": ", "bold", fontSize)
             description = getTextWithDiceRoll([r for r in ruleDescriptions if r['name'] == rule][0]['description'], settings['2w6'])
             parts = description.split(" ")
@@ -978,6 +978,7 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
                 pdf.showPage()
                 dataCardBoarderFrame(pdf, dataCardParameters)
                 offsetY = 0
+
             # Name
             pdf.setFillColorRGB(0, 0, 0)
             pdf.setFont("bold", fontSize)
@@ -990,6 +991,7 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
                 pdf.drawString(startX + offsetXName, startY + offsetY, line)
                 offsetY -= fontSize
                 offsetXName = 0
+
             offsetY -= 3
         pdf.showPage()
         dataCardBoarderFrame(pdf, dataCardParameters)
@@ -1095,7 +1097,9 @@ def createDataCard(army):
 
     image_infos = get_image_infos(settings)
     for unit in army['units']:
-        logger.info(f'{unit["name"]} ({unit["id"]})')
+        #logger.info(f'{unit["name"]} ({unit["id"]})')
+        #unit['size']
+        #logger.info(unit)
         dataCardBoarderFrame(pdf, dataCardParameters)
         dataCardUnitType(pdf, dataCardParameters, unit)
         dataCardUnitWounds(pdf, dataCardParameters, unit, army)
@@ -1293,6 +1297,12 @@ def getUnit(unit, jsonArmyBookList):
             data['quality'] = listUnit['quality']
             data['upgrades'] = listUnit['upgrades']
             data['size'] = listUnit['size']
+            data['combined'] = listUnit['combined']
+
+            if "joinToUnit" in unit:
+                data['joinToUnit'] = unit['joinToUnit']
+            else:
+                data['joinToUnit'] = None
             
             if "notes" in unit:
                 data['notes'] = unit['notes']
@@ -1556,7 +1566,14 @@ def parseArmyJsonList(armyListJsonFile: str, validateVersion=True):
     for unit in jsonArmyList['list']['units']:
         unitData = getUnit(unit, jsonArmyBookList)
         if unitData != {}:
-            armyData['units'].append(unitData)
+
+            #if combined
+            if unitData['combined']: 
+                #find the entry with our joinToUnit and update it
+                #armyData['units'].index(unitData['joinToUnit'])
+                armyData['units'].append(unitData)
+            else:
+                armyData['units'].append(unitData)
 
     return armyData
 
