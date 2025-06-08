@@ -718,7 +718,7 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
         pdf.restoreState() 
 
         pdf.setFillColorRGB(0, 0, 0)
-        if weapon['count'] > 1:
+        if int(weapon['count']) > 1:
             weaponLabel = str(weapon['count']) + "x " + weapon['name']
         else:
             weaponLabel = weapon['name']
@@ -908,6 +908,12 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
                 seen.add(name)
                 rules.append(name)
 
+    for rule in army.get('specialRules', []):
+        name = rule['name']
+        if name not in seen:
+            seen.add(name)
+            rules.append(name)
+
         for weapon in unit['weapons']:
             for rule in weapon.get('specialRules', []):
                 name = rule['name']
@@ -931,13 +937,18 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
             if common['name'].lower() == rule.lower():
                 ruleDescriptions.append({'name': common['name'], 'description': common['description']})
 
-    if 'armyId' in army:
-        armyRules = loadJsonFile(os.path.join(
-            settings['path']['dataFolderArmyBook'], army['armyId'] + "_" + str(army['gameSystemId']) + ".json"))
-        for rule in rules:
-            for armyRule in armyRules['specialRules']:
-                if armyRule['name'].lower() == rule.lower():
-                    ruleDescriptions.append({'name': armyRule['name'], 'description': armyRule['description']})
+    if 'armyIds' in army:
+        for armyId in army.get('armyIds', []):
+            armyRules = loadJsonFile(os.path.join(
+                settings['path']['dataFolderArmyBook'], armyId + "_" + str(army['gameSystemId']) + ".json"))
+            # logger.info("START")
+            # logger.info(armyRules)
+            # logger.info("END")
+            for rule in rules:
+                #for armyRule in armyRules['specialRules']:
+                for armyRule in armyRules.get('specialRules', []):
+                    if armyRule['name'].lower() == rule.lower():
+                        ruleDescriptions.append({'name': armyRule['name'], 'description': armyRule['description']})
 
     dataCardBoarderFrame(pdf, dataCardParameters)
 
@@ -962,7 +973,13 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
 
         for rule in unitSeen:
             offsetXName = pdf.stringWidth(rule + ": ", "bold", fontSize)
-            description = getTextWithDiceRoll([r for r in ruleDescriptions if r['name'] == rule][0]['description'], settings['2w6'])
+            rule_desc_list = [r for r in ruleDescriptions if r['name'] == rule]
+            if not rule_desc_list:
+                logger.warning(f"No description found for rule: {rule}")
+                continue
+
+            description = getTextWithDiceRoll(rule_desc_list[0]['description'], settings['2w6'])
+            #description = getTextWithDiceRoll([r for r in ruleDescriptions if r['name'] == rule][0]['description'], settings['2w6'])
             parts = description.split(" ")
             lines = []
             lineParts = []
@@ -1556,6 +1573,7 @@ def parseArmyJsonList(armyListJsonFile: str, validateVersion=True):
     armyData['gameSystem'] = jsonArmyList['gameSystem']
     armyData['gameSystemId'] = getGameSystemId(jsonArmyList['gameSystem'])
     armyData['armyVersions'] = jsonArmyList['armyVersions']
+    armyData['armyIds'] = jsonArmyList['armyIds']
 
     for armyId in jsonArmyList['armyIds']:
         downloadArmyBook(armyId, armyData['gameSystemId'])
@@ -1571,15 +1589,10 @@ def parseArmyJsonList(armyListJsonFile: str, validateVersion=True):
     armyData['listPoints'] = jsonArmyList['listPoints']
     armyData['listName'] = jsonArmyList['list']['name']
 
-
     armyData['units'] = []
     for unit in jsonArmyList['list']['units']:
         unitData = getUnit(unit, jsonArmyBookList)
         if unitData != {}:
-
-            #if combined
-            #logger.info(unitData)
-           
             if unitData['combined'] and unit['joinToUnit'] is not None:
                 target_unit = next((u for u in armyData['units'] if u['selectionId'] == unit['joinToUnit']), None)
                 if target_unit:
@@ -1599,11 +1612,8 @@ def parseArmyJsonList(armyListJsonFile: str, validateVersion=True):
                 armyData['units'].append(unitData)
             else:
                 armyData['units'].append(unitData)
-    logger.info(armyData)
+    #logger.info(armyData)
     return armyData
-
-def find_unit_by_id(units, target_id):
-    return next((unit for unit in units if unit['id'] == target_id), None)
 
 def armyVersionsDifference():
     logger.warning("Army Book version from JSON is different than Army Book Version from OPR Server")
