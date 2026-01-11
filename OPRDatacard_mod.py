@@ -414,25 +414,21 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
 
 
 
-    nameLines = []
-    maxLineChars = 55
-    lineParts = []
-    parts = ", ".join(specialRules).split(" ")
-    for part in parts:
-        if len(" ".join(lineParts)) + len(part) > maxLineChars:
-            nameLines.append(" ".join(lineParts))
-            lineParts = []
-        lineParts.append(part)
-    nameLines.append(" ".join(lineParts))
-
+    # Wrap special rules using font metrics so text doesn't overflow the card
+    rules_text = ", ".join(specialRules)
     pdf.setFont('bold', 7)
     pdf.setFillColorRGB(0, 0, 0)
+    start_x = 5
+    # Leave room on the right for the image/triangle area (offsetRight 40 + edgeLength 65) and margins
+    reserved_right = 40 + 65 + 5
+    available_width = dataCardParameters['pdfSize'][0] - start_x - reserved_right
+    # Use the helper to wrap by width (keeps font size steady)
+    nameLines = wrap_text_to_lines(rules_text, 'bold', 7, available_width)
     offset = 0
     if len(nameLines) > 1:
         offset -= 12
     for line in nameLines:
-        #pdf.drawString(5, dataCardParameters['pdfSize'][1] - 25 - offset, line)
-        pdf.drawString(5, dataCardParameters['pdfSize'][1] - 47 - offset, line)
+        pdf.drawString(start_x, dataCardParameters['pdfSize'][1] - 47 - offset, line)
         offset += 10
     
     #smallInfo.append(", ".join(specialRules))
@@ -774,11 +770,19 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
                 label.append(str(specialRule['label']))
             pdf.setFont("italic", 10)
 
-            pdf.drawString(startX + offsetX[4], startY + offsetY, ", ".join(label))
+            # Wrap special rules to fit the 'Special Rules' column
+            rules_text = ", ".join(label)
+            # Table row width used above is 290, so calculate available width for this column
+            col_available_width = 290 - offsetX[4] - 5
+            lines = wrap_text_to_lines(rules_text, 'italic', 10, col_available_width)
+            lineHeight = int(10 * 1.2)
+            base_y = startY + offsetY
+            for i, l in enumerate(lines):
+                pdf.drawString(startX + offsetX[4], base_y - (i * lineHeight), l)
+            offsetY -= (len(lines) * lineHeight)
         else:
             pdf.drawString(startX + offsetX[4], startY + offsetY, "-")
-
-        offsetY -= 12
+            offsetY -= 12
 
     if 'equipment' in unit and len(unit['equipment']) > 0:
         offsetY -= 5
@@ -817,8 +821,14 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
 
             
             pdf.setFont("italic", 10)
-            pdf.drawString(startX + offsetX[4], startY + offsetY, ", ".join(label))
-            offsetY -= 12
+            rules_text = ", ".join(label)
+            col_available_width = 290 - offsetX[4] - 5
+            lines = wrap_text_to_lines(rules_text, 'italic', 10, col_available_width)
+            lineHeight = int(10 * 1.2)
+            base_y = startY + offsetY
+            for i, l in enumerate(lines):
+                pdf.drawString(startX + offsetX[4], base_y - (i * lineHeight), l)
+            offsetY -= (len(lines) * lineHeight)
 
 
 def unitOverview(pdf, dataCardParameters, army):
