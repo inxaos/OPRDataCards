@@ -6,4 +6,5 @@ RUN apt-get update && apt-get install -y build-essential python3-dev \
 WORKDIR /app
 COPY . /app
 
-RUN pyinstaller --onefile OPRDatacard.py --add-data ./data:./data
+#RUN pyinstaller --onefile OPRDatacard.py --add-data ./data:./data
+RUN pyinstaller --onefile OPRDatacard_mod.py --add-data ./data:./data

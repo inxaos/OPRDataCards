@@ -974,8 +974,9 @@ def dataCardRuleInfo(pdf, dataCardParameters, army):
         for rule in unitSeen:
             offsetXName = pdf.stringWidth(rule + ": ", "bold", fontSize)
             rule_desc_list = [r for r in ruleDescriptions if r['name'] == rule]
-            if not rule_desc_list:
+            if not rule_desc_list:                
                 logger.warning(f"No description found for rule: {rule}")
+                logger.warning(ruleDescriptions)
                 continue
 
             description = getTextWithDiceRoll(rule_desc_list[0]['description'], settings['2w6'])
