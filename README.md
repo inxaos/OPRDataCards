@@ -29,3 +29,10 @@ Tool to create PDF data cards for Onepagerules (GF, GFF, AOF, AOFS and AOFR).
 
 To add images to the datacards edit the `data\images\images.json` file.
 The first matching entry is used for the image.
+
+
+## Steps
+
+create venv
+pip install
+run

@@ -49,6 +49,16 @@ def find_fitting_font_size(text, font_name, base_font_size, min_font_size, max_w
     lines = wrap_text_to_lines(text, font_name, min_font_size, max_width)
     return min_font_size, lines
 
+def get_fitting_font_size_no_wrap(text, font_name, base_font_size, min_font_size, max_width):
+    """Find the largest font size that fits text within max_width without wrapping"""
+    font_size = base_font_size
+    while font_size >= min_font_size:
+        text_width = pdfmetrics.stringWidth(text, font_name, font_size)
+        if text_width <= max_width:
+            return font_size
+        font_size -= 1
+    return min_font_size
+
 import tkinter as tk
 from tkinter import ttk, filedialog
 import os
@@ -336,10 +346,31 @@ def dataCardUnitPoints(pdf, dataCardParameters, unit):
         sideClearance = 20
         bottomClearance = 5
         height = 10
-        pdf.setFont('regular', 7)
+        
+        # The points box spans from sideClearance to pdfSize[0] - sideClearance
+        box_width = dataCardParameters['pdfSize'][0] - (sideClearance * 2)
+        available_width = box_width - 4  # account for padding on both sides
+        
+        # Create "Points:" label and cost string
+        points_label = "Points:"
+        cost_str = str(cost) + " pt"
+        
+        # Check if they fit at font size 7
+        label_width = pdfmetrics.stringWidth(points_label, 'regular', 7)
+        cost_width = pdfmetrics.stringWidth(cost_str, 'regular', 7)
+        
+        # If combined width exceeds available, reduce font size
+        font_size = 7
+        if label_width + cost_width + 10 > available_width:  # 10px spacing between label and cost
+            font_size = get_fitting_font_size_no_wrap(points_label, 'regular', 7, 5, available_width / 2)
+            label_width = pdfmetrics.stringWidth(points_label, 'regular', font_size)
+            cost_width = pdfmetrics.stringWidth(cost_str, 'regular', font_size)
+        
+        pdf.setFont('regular', font_size)
         pdf.setFillColorRGB(0, 0, 0)
-        pdf.drawRightString(dataCardParameters['pdfSize'][0] - 22, bottomClearance +
-                            (height/2)-2, str(cost) + " pt")
+        pdf.drawString(sideClearance + 2, bottomClearance + (height/2)-2, points_label)
+        pdf.drawRightString(dataCardParameters['pdfSize'][0] - sideClearance - 2, bottomClearance +
+                            (height/2)-2, cost_str)
 
 def process_rules_list(rules_list):
     toughPattern = re.compile(r"Tough\((\d+)\)")
@@ -378,7 +409,7 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
     for rule in unit['rules']:
         #logger.info(rule)
         count = ""
-        if 'count' in rule and unit['size'] != 1:
+        if 'count' in rule and unit['size'] is not None and unit['size'] != 1:
             count = f'{rule["count"]}x '
         specialRules.append(f'{count}{rule["label"]}')
 
@@ -416,20 +447,28 @@ def dataCardUnitType(pdf, dataCardParameters, unit):
 
     # Wrap special rules using font metrics so text doesn't overflow the card
     rules_text = ", ".join(specialRules)
-    pdf.setFont('bold', 7)
-    pdf.setFillColorRGB(0, 0, 0)
     start_x = 5
     # Leave room on the right for the image/triangle area (offsetRight 40 + edgeLength 65) and margins
     reserved_right = 40 + 65 + 5
     available_width = dataCardParameters['pdfSize'][0] - start_x - reserved_right
-    # Use the helper to wrap by width (keeps font size steady)
-    nameLines = wrap_text_to_lines(rules_text, 'bold', 7, available_width)
+    
+    # Start with font size 7 and reduce if needed
+    font_size = 7
+    nameLines = wrap_text_to_lines(rules_text, 'bold', font_size, available_width)
+    
+    # If text wraps to multiple lines, try reducing font size to fit on fewer lines
+    if len(nameLines) > 2:
+        font_size = 6
+        nameLines = wrap_text_to_lines(rules_text, 'bold', font_size, available_width)
+    
+    pdf.setFont('bold', font_size)
+    pdf.setFillColorRGB(0, 0, 0)
     offset = 0
     if len(nameLines) > 1:
         offset -= 12
     for line in nameLines:
         pdf.drawString(start_x, dataCardParameters['pdfSize'][1] - 47 - offset, line)
-        offset += 10
+        offset += int(font_size * 1.4)
     
     #smallInfo.append(", ".join(specialRules))
 
@@ -510,7 +549,7 @@ def dataCardUnitRules(pdf, dataCardParameters, unit):
     for rule in unit['rules']:
         logger.debug(rule)
         count = ""
-        if 'count' in rule and unit['size'] != 1:
+        if 'count' in rule and unit['size'] is not None and unit['size'] != 1:
             count = f'{rule["count"]}x '
         specialRules.append(f'{count}{rule["label"]}')
 
@@ -656,17 +695,25 @@ def dataCardUnitName(pdf, dataCardParameters, unit):
             nameLines.append(" ".join(lineParts))
             lineParts = []
         lineParts.append(part)
-    if int(unit['size']) > 1:
+    if unit['size'] is not None and int(unit['size']) > 1:
         lineParts.append(" (x" + str(unit['size']) + ")")
     nameLines.append(" ".join(lineParts))
 
+    # Check if text will fit and adjust font size if needed
+    reserved_right = 40 + 65 + 5  # image triangle area + margins
+    available_width = dataCardParameters['pdfSize'][0] - 5 - reserved_right  # start at x=5
+    final_font_size = fontSize
+    for line in nameLines:
+        fitting_size = get_fitting_font_size_no_wrap(line, 'bold', fontSize, 8, available_width)
+        final_font_size = min(final_font_size, fitting_size)
+    
     #pdf.setFont('bold', 14)
-    pdf.setFont('bold', fontSize)
+    pdf.setFont('bold', final_font_size)
     pdf.setFillColorRGB(0, 0, 0)
     offset = 0
     for line in nameLines:
         pdf.drawString(5, dataCardParameters['pdfSize'][1] - 25 - offset, line)
-        offset += 12
+        offset += int(final_font_size * 1.2)
 
 def dataCardArmyBookVersion(pdf, dataCardParameters, versions, armyId):
     logger.debug("Add version")
@@ -748,9 +795,15 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
         else:
             weaponLabel = weapon['name']
 
+        # Check if weapon name fits in column 1 (from offset[0] to offset[1])
+        weapon_col_width = offsetX[1] - offsetX[0] - 5
+        weapon_font_size = get_fitting_font_size_no_wrap(weaponLabel, 'regular', 10, 7, weapon_col_width)
+        pdf.setFont("regular", weapon_font_size)
         pdf.drawString(startX + offsetX[0],
                        startY + offsetY, weaponLabel)
 
+        # Reset font size for other columns
+        pdf.setFont("regular", 10)
         if "range" in weapon:
             pdf.drawString(startX + offsetX[1] + 5, startY + offsetY, str(weapon['range']) + '"')
         else:
@@ -768,14 +821,18 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
             label = []
             for specialRule in weapon['specialRules']:
                 label.append(str(specialRule['label']))
-            pdf.setFont("italic", 10)
-
-            # Wrap special rules to fit the 'Special Rules' column
-            rules_text = ", ".join(label)
+            # Start with default font size for special rules
+            font_size = 10
             # Table row width used above is 290, so calculate available width for this column
             col_available_width = 290 - offsetX[4] - 5
-            lines = wrap_text_to_lines(rules_text, 'italic', 10, col_available_width)
-            lineHeight = int(10 * 1.2)
+            rules_text = ", ".join(label)
+            lines = wrap_text_to_lines(rules_text, 'italic', font_size, col_available_width)
+            # If wrapped to multiple lines, reduce font size progressively
+            while len(lines) > 1 and font_size > 5:
+                font_size -= 1
+                lines = wrap_text_to_lines(rules_text, 'italic', font_size, col_available_width)
+            pdf.setFont("italic", font_size)
+            lineHeight = int(font_size * 1.2)
             base_y = startY + offsetY
             for i, l in enumerate(lines):
                 pdf.drawString(startX + offsetX[4], base_y - (i * lineHeight), l)
@@ -820,11 +877,19 @@ def dataCardUnitWeaponsEquipment(pdf, dataCardParameters, unit):
                 #     toughness += specialRule['rating']
 
             
-            pdf.setFont("italic", 10)
+            # Start with default font size for special rules
+            font_size = 10
             rules_text = ", ".join(label)
             col_available_width = 290 - offsetX[4] - 5
-            lines = wrap_text_to_lines(rules_text, 'italic', 10, col_available_width)
-            lineHeight = int(10 * 1.2)
+            lines = wrap_text_to_lines(rules_text, 'italic', font_size, col_available_width)
+            # If wrapped, reduce font size by 2pt and re-wrap
+            if len(lines) > 1:
+                new_size = max(5, font_size - 1)
+                if new_size != font_size:
+                    font_size = new_size
+                    lines = wrap_text_to_lines(rules_text, 'italic', font_size, col_available_width)
+            pdf.setFont("italic", font_size)
+            lineHeight = int(font_size * 1.2)
             base_y = startY + offsetY
             for i, l in enumerate(lines):
                 pdf.drawString(startX + offsetX[4], base_y - (i * lineHeight), l)
@@ -1177,9 +1242,9 @@ def createDataCard(army):
 
     image_infos = get_image_infos(settings)
     for unit in army['units']:
-        #logger.info(f'{unit["name"]} ({unit["id"]})')
+        logger.info(f'{unit["name"]} ({unit["id"]})')
         #unit['size']
-        #logger.info(unit)
+        logger.info(unit)
         dataCardBoarderFrame(pdf, dataCardParameters)
         dataCardUnitType(pdf, dataCardParameters, unit)
         dataCardUnitWounds(pdf, dataCardParameters, unit, army)
@@ -1379,7 +1444,7 @@ def getUnit(unit, jsonArmyBookList):
             data['defense'] = listUnit['defense']
             data['quality'] = listUnit['quality']
             data['upgrades'] = listUnit['upgrades']
-            data['size'] = listUnit['size']
+            data['size'] = listUnit['size'] if listUnit['size'] is not None else 1
             data['selectionId'] = unit['selectionId']
             #data['combined'] = unit['combined']
 
@@ -1461,7 +1526,7 @@ def getWeapon(data, modCount=-1):
     if "name" in data:
         weapon['name'] = data['name']
 
-    if "range" in data and data['range'] > 0:
+    if "range" in data and data['range'] is not None and data['range'] > 0:
         weapon['range'] = data['range']
 
     weapon['specialRules'] = getRules(data['specialRules'])
@@ -1482,14 +1547,15 @@ def removeItem(removeItems: list, count: int, originalItems: dict, type=""):
             remove = remove.strip()
             group = [remove, remove + "s", remove[:-1]]
             if re.match(r'^(' + "|".join(group) + ')$', originalItems[i]['name'].strip()):
-                if ('count' not in originalItems[i] or count == "any" or count == None or originalItems[i]['count'] == 1):
+                item_count = originalItems[i].get('count')
+                if ('count' not in originalItems[i] or count == "any" or count == None or item_count is None or item_count == 1):
                     logger.debug("if")
                     originalItems.pop(i)
                 else:
                     logger.debug("else")
                     originalItems[i]['count'] = int(originalItems[i]['count']) - count
                     #originalItems[i]['count'] -= count
-                    if originalItems[i]['count'] <= 0:
+                    if originalItems[i]['count'] is not None and originalItems[i]['count'] <= 0:
                         originalItems.pop(i)
                 break
     return originalItems
@@ -1579,7 +1645,7 @@ def getUnitUpgrades(unit, unitData, jsonArmyBookList):
                                         logger.warning("Default handling for " + str(affects))
                                         affectsValue = 1
 
-                                    if unitData['size'] > 1:
+                                    if unitData['size'] is not None and unitData['size'] > 1:
                                         unitData['weapons'] = mergeWeapon(unitData['weapons'])
 
                                     unitData['weapons'] = removeItem(targets, affectsValue, unitData['weapons'], 'weapons')
